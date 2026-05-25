@@ -508,3 +508,4 @@ def test_delete_registration_not_found():
         f"/registrations?username={USER['username']}&event_id={event_id}"
     )
     assert response.status_code == 404
+
