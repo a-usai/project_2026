@@ -86,18 +86,23 @@ def update_event(event_id: int, event: EventCreate, session: SessionDep) -> Even
 
     try:
         event.validate_date
-    except ValueError:
+    except (ValueError, TypeError):
         raise HTTPException(status_code=422, detail="Invalid datetime format")
 
-    db_event.title = event.title
-    db_event.description = event.description
-    db_event.date = datetime.fromisoformat(event.date)
-    db_event.location = event.location
+    event_data = event.model_dump(exclude_unset=True)
+    for key, value in event_data.items():
+        if key == "date":
+            value = datetime.fromisoformat(value)
+        setattr(db_event, key, value)
 
-    session.add(db_event)
-    session.commit()
-    session.refresh(db_event)
-    return db_event
+    try:
+        session.add(db_event)
+        session.commit()
+        session.refresh(db_event)
+        return db_event
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/events")
 def delete_all_events(session: SessionDep):
