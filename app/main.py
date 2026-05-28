@@ -4,6 +4,7 @@ from app.config import config
 
 from pathlib import Path
 import os
+from app.routers import events
 
 # ...and here!!
 
@@ -34,6 +35,8 @@ app.mount(
     name="static"
 )
 app.include_router(frontend.router)
+
+app.include_router(events.router)
 
 
 if __name__ == "__main__":
