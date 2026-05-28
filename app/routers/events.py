@@ -5,12 +5,14 @@ from app.data.db import SessionDep
 from app.models.event import Event
 from app.models.user import User
 from app.models.registration import Registration
-from pydantic import BaseModel
+from app.routers.users import UserCreate
+from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 
 router = APIRouter(tags=["events"])
 
 class EventCreate(BaseModel):
+    model_config = ConfigDict(strict=True)
     title: str
     description: str
     date: str  # ISO format datetime string
@@ -20,7 +22,7 @@ class EventCreate(BaseModel):
     def validate_date(self):
         try:
             datetime.fromisoformat(self.date)
-        except ValueError:
+        except (ValueError,TypeError):
             raise ValueError("Invalid datetime format")
 
 
@@ -71,7 +73,7 @@ def get_event(event_id: int, session: SessionDep) -> Event:
 
 
 @router.put("/events/{event_id}", response_model=EventCreate)
-def update_event(event_id: int, event_update: Event, session: SessionDep) -> Event:
+def update_event(event_id: int, event: EventCreate, session: SessionDep) -> Event:
     """
     Aggiorna un evento esistente.
 
@@ -83,14 +85,14 @@ def update_event(event_id: int, event_update: Event, session: SessionDep) -> Eve
         raise HTTPException(status_code=404, detail="Event not found")
 
     try:
-        event_update.validate_date
+        event.validate_date
     except ValueError:
         raise HTTPException(status_code=422, detail="Invalid datetime format")
 
-    db_event.title = event_update.title
-    db_event.description = event_update.description
-    db_event.date = datetime.fromisoformat(event_update.date)
-    db_event.location = event_update.location
+    db_event.title = event.title
+    db_event.description = event.description
+    db_event.date = datetime.fromisoformat(event.date)
+    db_event.location = event.location
 
     session.add(db_event)
     session.commit()
@@ -130,3 +132,26 @@ def delete_event(event_id: int, session: SessionDep):
     session.delete(event)
     session.commit()
     return {"message": "Event and associated registrations deleted successfully"}
+
+@router.post("/events/{event_id}/register", status_code=201)
+def register_to_event(event_id: int, user_data: UserCreate, session: SessionDep):
+    """Register a user to an event."""
+    event = session.get(Event, event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    user = session.get(User, user_data.username)
+    if not user:
+        user = User(username=user_data.username, name=user_data.name, email=user_data.email)
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+
+    reg = session.get(Registration, (user.username, event_id))
+    if not reg:
+        reg = Registration(username=user.username, event_id=event_id)
+        session.add(reg)
+        session.commit()
+        session.refresh(reg)
+
+    return reg

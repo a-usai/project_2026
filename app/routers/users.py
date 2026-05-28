@@ -4,11 +4,12 @@ from sqlmodel import select
 from app.data.db import SessionDep
 from app.models.user import User
 from app.models.registration import Registration
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 router = APIRouter(tags=["users"])
 
 class UserCreate(BaseModel):
+    model_config = ConfigDict(strict=True)
     username: str
     name: str
     email: str
