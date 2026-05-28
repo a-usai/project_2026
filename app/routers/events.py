@@ -5,8 +5,23 @@ from app.data.db import SessionDep
 from app.models.event import Event
 from app.models.user import User
 from app.models.registration import Registration
+from pydantic import BaseModel
+from datetime import datetime
 
 router = APIRouter(tags=["events"])
+
+class EventCreate(BaseModel):
+    title: str
+    description: str
+    date: str  # ISO format datetime string
+    location: str
+
+    @property
+    def validate_date(self):
+        try:
+            datetime.fromisoformat(self.date)
+        except ValueError:
+            raise ValueError("Invalid datetime format")
 
 
 @router.get("/events", response_model=List[Event])
@@ -22,7 +37,7 @@ def get_events(session: SessionDep) -> List[Event]:
 
 
 @router.post("/events", response_model=Event, status_code=201)
-def create_event(event: Event, session: SessionDep) -> Event:
+def create_event(event: EventCreate, session: SessionDep) -> Event:
     """
     Crea un nuovo evento.
 
@@ -30,13 +45,32 @@ def create_event(event: Event, session: SessionDep) -> Event:
     li valida tramite Pydantic/SQLModel e salva l'evento nel database SQLite.
     Restituisce l'evento salvato, includendo l'id generato.
     """
-    session.add(event)
+    try:
+        event.validate_date
+    except ValueError:
+        raise HTTPException(status_code=422, detail="datetime format not valid")
+
+    db_event = Event(
+        title=event.title,
+        description=event.description,
+        date=datetime.fromisoformat(event.date),
+        location=event.location
+    )
+    session.add(db_event)
     session.commit()
-    session.refresh(event)
+    session.refresh(db_event)
+    return db_event
+
+@router.get("/events/{event_id}", response_model=Event)
+def get_event(event_id: int, session: SessionDep) -> Event:
+    """Get a specific event by ID."""
+    event = session.get(Event, event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
     return event
 
 
-@router.put("/events/{event_id}", response_model=Event)
+@router.put("/events/{event_id}", response_model=EventCreate)
 def update_event(event_id: int, event_update: Event, session: SessionDep) -> Event:
     """
     Aggiorna un evento esistente.
@@ -48,9 +82,15 @@ def update_event(event_id: int, event_update: Event, session: SessionDep) -> Eve
     if not db_event:
         raise HTTPException(status_code=404, detail="Event not found")
 
-    event_data = event_update.model_dump(exclude_unset=True)
-    for key, value in event_data.items():
-        setattr(db_event, key, value)
+    try:
+        event_update.validate_date
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid datetime format")
+
+    db_event.title = event_update.title
+    db_event.description = event_update.description
+    db_event.date = datetime.fromisoformat(event_update.date)
+    db_event.location = event_update.location
 
     session.add(db_event)
     session.commit()
