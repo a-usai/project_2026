@@ -72,7 +72,7 @@ def get_event(event_id: int, session: SessionDep) -> Event:
     return event
 
 
-@router.put("/events/{event_id}", response_model=EventCreate)
+@router.put("/events/{event_id}", response_model=Event)
 def update_event(event_id: int, event: EventCreate, session: SessionDep) -> Event:
     """
     Aggiorna un evento esistente.
